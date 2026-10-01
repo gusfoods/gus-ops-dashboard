@@ -379,8 +379,8 @@ def sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, until=None):
         ('Scrap',                     base + [('location_dest_id', 'in', scrap_ids)],  'src'),
         ('Negative Stock Adjustment', base + [('location_dest_id', 'in', adj_ids)],    'src'),
         ('Positive Stock Adjustment', base + [('location_id', 'in', adj_ids)],         'dest'),
-        ('Delivered to',              base + [('location_dest_id', 'in', fridge_stock_ids),
-                                              ('picking_type_id.code', 'in', ['internal', 'incoming'])], 'dest'),
+                ('Delivered to',              base + [('location_dest_id', 'in', fridge_stock_ids),
+                                              ('location_id.usage', 'in', ['supplier', 'internal', 'transit'])], 'dest'),
     ]
 
     total = 0
