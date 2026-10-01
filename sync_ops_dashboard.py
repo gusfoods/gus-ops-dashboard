@@ -81,12 +81,13 @@ class Odoo:
                 log(f'  Odoo call failed ({e.__class__.__name__}), retrying in {wait}s...')
                 time.sleep(wait)
 
-    def read_all(self, model, domain, fields, order='id'):
+    def read_all(self, model, domain, fields, order='id', context=None):
         """Paginate search_read until exhausted."""
         out, offset = [], 0
         while True:
             rows = self.call(model, 'search_read', [domain],
-                             fields=fields, limit=BATCH_ODOO, offset=offset, order=order)
+                             fields=fields, limit=BATCH_ODOO, offset=offset, order=order,
+                             **({'context': context} if context else {}))
             out.extend(rows)
             log(f'  {model}: fetched {len(out)} rows')
             if len(rows) < BATCH_ODOO:
@@ -175,9 +176,12 @@ def m2o_name(v):
 
 def sync_products(odoo, sb, now_iso):
     log('Syncing products...')
+    # active_test False: include archived products so historical sale lines keep their
+    # reference and category (otherwise ~5% of lines fall outside the catalog).
     rows = odoo.read_all('product.product', [],
                          ['default_code', 'name', 'barcode', 'standard_price', 'list_price',
-                          'categ_id', 'type'])
+                          'categ_id', 'type'],
+                         context={'active_test': False})
     out = []
     for p in rows:
         if not p.get('default_code'):
