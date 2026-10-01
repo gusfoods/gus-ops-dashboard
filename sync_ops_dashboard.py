@@ -240,6 +240,46 @@ def sync_warehouses(odoo, sb, now_iso):
     return stock_loc_to_wh
 
 
+def sync_stock_requests(odoo, sb, since, now_iso, until=None):
+    """Odoo stock.request (OCA): the planner's replenishment decision per fridge × product ×
+    expected date. Feeds the forecasting tool's pre-fill (gus-forecasting/pipeline/stock_requests.py).
+    Incremental on write_date so state changes (In progress -> Done / Cancelled) are picked up."""
+    log(f'Syncing stock requests since {since}...')
+    domain = [('write_date', '>=', since)]
+    if until:
+        domain.append(('write_date', '<', until))
+    fields = ['name', 'product_id', 'product_uom_qty', 'qty_done', 'qty_cancelled', 'qty_in_progress',
+              'state', 'warehouse_id', 'location_id', 'expected_date', 'create_date', 'write_date']
+    try:
+        rows = odoo.read_all('stock.request', domain, fields, order='id')
+    except Exception as e:
+        log(f'  stock.request not available ({e.__class__.__name__}); skipping')
+        return 0
+    out = []
+    for r in rows:
+        prod = r.get('product_id')
+        prod_name = prod[1] if isinstance(prod, (list, tuple)) else ''
+        ref = prod_name.split(']')[0].strip('[') if prod_name.startswith('[') else None
+        out.append({
+            'id': r['id'],
+            'name': r.get('name'),
+            'product_ref': ref,
+            'product_name': prod_name,
+            'warehouse_name': m2o_name(r.get('warehouse_id')),
+            'location_name': m2o_name(r.get('location_id')),
+            'expected_date': r.get('expected_date') or None,
+            'product_uom_qty': r.get('product_uom_qty') or 0,
+            'qty_done': r.get('qty_done') or 0,
+            'qty_cancelled': r.get('qty_cancelled') or 0,
+            'qty_in_progress': r.get('qty_in_progress') or 0,
+            'state': r.get('state'),
+            'created_at': r.get('create_date'),
+            'updated_at': r.get('write_date'),
+            'synced_at': now_iso,
+        })
+    return sb.upsert('stock_requests', out, 'id')
+
+
 INVOICE_JOURNALS = ['FEES', 'ROOM']
 
 
@@ -436,12 +476,13 @@ def main():
     log(f'Connected to Odoo (uid {odoo.uid}); syncing since {since}')
 
     if args.invoices_only:
-        n_products = n_sales = n_moves = 0
+        n_products = n_sales = n_moves = n_sr = 0
     else:
         n_products = sync_products(odoo, sb, now_iso)
         stock_loc_to_wh = sync_warehouses(odoo, sb, now_iso)
         n_sales = sync_sales(odoo, sb, since, now_iso, args.until)
         n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, args.until)
+        n_sr = sync_stock_requests(odoo, sb, since, now_iso, args.until)
     n_inv = sync_invoice_lines(odoo, sb, since, now_iso, args.until)
 
     if args.no_refresh:
@@ -458,7 +499,7 @@ def main():
                     raise
                 log(f'Refresh failed ({e}); retrying in 90s')
                 time.sleep(90)
-    log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} invoice_lines={n_inv}')
+    log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} stock_requests={n_sr} invoice_lines={n_inv}')
 
 
 if __name__ == '__main__':
