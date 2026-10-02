@@ -180,13 +180,19 @@ def sync_products(odoo, sb, now_iso):
     # reference and category (otherwise ~5% of lines fall outside the catalog).
     rows = odoo.read_all('product.product', [],
                          ['default_code', 'name', 'barcode', 'standard_price', 'list_price',
-                          'categ_id', 'type'],
+                          'categ_id', 'type', 'allergen_ids', 'may_contain_allergen_ids'],
                          context={'active_test': False})
+    # allergen id -> English name (product.allergen, EU 1169/2011 list maintained in Odoo)
+    allergen_names = {a['id']: clean(a['name']) for a in
+                      odoo.call('product.allergen', 'search_read', [[]], fields=['name'], context={'lang': 'en_US'})}
+    names_of = lambda ids: sorted({allergen_names[i] for i in (ids or []) if i in allergen_names})
     out = []
     for p in rows:
         if not p.get('default_code'):
             continue
         out.append({
+            'allergens': names_of(p.get('allergen_ids')),
+            'may_contain_allergens': names_of(p.get('may_contain_allergen_ids')),
             'internal_reference': p['default_code'],
             'name': clean(p.get('name')),
             'barcode': clean(p.get('barcode')),
