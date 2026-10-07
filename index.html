@@ -442,8 +442,24 @@
   .xp-kpi .value{font-size:30px;}
   .xp-rank{color:var(--ink-soft);width:34px;}
   .xp-share-bar{display:inline-block;height:8px;border-radius:4px;background:var(--kale);vertical-align:middle;margin-right:8px;}
+  .xp-kpi-section{margin-bottom:22px;}
+  .xp-kpi-section .kpi-row{margin-bottom:0;}
+  .xp-tools{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);}
+  .xp-include{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);cursor:pointer;user-select:none;align-self:flex-end;}
+  .xp-include input{margin:0;accent-color:var(--kale);}
+  .xp-note{
+    width:100%;min-height:54px;resize:vertical;font-family:Raleway,sans-serif;font-size:13px;line-height:1.5;color:var(--ink);
+    background:var(--vanilla);border:1px solid var(--line);border-radius:10px;padding:8px 12px;
+  }
+  .xp-note:focus{outline:none;border-color:var(--kale);}
+  .xp-note-print{display:none;font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap;margin-top:10px;padding:10px 14px;border-left:3px solid var(--coral);background:var(--vanilla);border-radius:0 10px 10px 0;}
+  .xp-section.xp-excluded{opacity:.45;}
+  .xp-section.xp-excluded .xp-tools{opacity:1;}
   @media print{
     @page{size:A4;margin:12mm;}
+    body.xp-print .xp-section.xp-excluded, body.xp-print .xp-note, body.xp-print .xp-include, body.xp-print #xpChartGrid.xp-empty{display:none !important;}
+    body.xp-print .xp-tools{border-top:none;margin-top:0;padding-top:0;}
+    body.xp-print .xp-section.xp-has-note .xp-note-print{display:block;}
     body.xp-print *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body.xp-print header.top, body.xp-print .controls, body.xp-print .xp-controls,
     body.xp-print #opsView, body.xp-print #custView, body.xp-print #assortView, body.xp-print #b2bView{display:none !important;}
@@ -899,6 +915,7 @@
       <p class="xp-intro">How your colleagues use the Gus fridge: how many people buy, how often they come back, and what they
          like most. Customers are counted as unique buyers; no personal data is shown.</p>
 
+      <div class="xp-section xp-kpi-section" id="xpSecKpi">
       <div class="kpi-row">
         <div class="kpi rev xp-kpi">
           <div class="label">Unique customers</div>
@@ -925,32 +942,33 @@
           <div class="kpi-delta" id="xkpiFreqDelta"></div>
         </div>
       </div>
+      </div>
 
-      <div class="chart-card full" style="margin-bottom:16px;">
+      <div class="chart-card full xp-section" id="xpSecBuyers" style="margin-bottom:16px;">
         <h3>New vs returning customers <span id="xpBuyersScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
         <div class="wrap"><div id="chartXpBuyers" class="chart-svg"></div></div>
       </div>
-      <div class="chart-grid">
-        <div class="chart-card">
+      <div class="chart-grid" id="xpChartGrid">
+        <div class="chart-card xp-section" id="xpSecOrders">
           <h3>Purchases over time</h3>
           <div class="wrap"><div id="chartXpOrders" class="chart-svg"></div></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card xp-section" id="xpSecFreq">
           <h3>Visits per customer</h3>
           <div class="wrap"><div id="chartXpFreq" class="chart-svg"></div></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card xp-section" id="xpSecWeekday">
           <h3>Busiest days of the week</h3>
           <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Average purchases per day</p>
           <div class="wrap" style="height:200px;"><div id="chartXpWeekday" class="chart-svg"></div></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card xp-section" id="xpSecCats">
           <h3>Popular categories</h3>
           <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Share of items sold</p>
           <div class="wrap" style="height:260px;"><div id="chartXpCats" class="chart-svg"></div></div>
         </div>
       </div>
-      <div class="chart-card full xp-page-break" style="margin-top:16px;">
+      <div class="chart-card full xp-page-break xp-section" id="xpSecProd" style="margin-top:16px;">
         <h3>Most popular items <span id="xpProdScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
         <div class="table-scroll" style="max-height:600px;"><table class="data" id="xpProdTable"></table></div>
       </div>
@@ -3419,7 +3437,40 @@
     });
     document.getElementById('xpTitle').addEventListener('input', xpUpdateHead);
     document.getElementById('xpExportBtn').addEventListener('click', xpExportPdf);
+    document.querySelectorAll('#xpView .xp-section').forEach(xpAddSectionTools);
     window.addEventListener('afterprint', () => document.body.classList.remove('xp-print'));
+  }
+  // Per-section "Team notes" + "Include in export". Empty notes and unchecked
+  // sections are dropped from the PDF via body.xp-print CSS rules.
+  function xpAddSectionTools(sec){
+    const tools = document.createElement('div');
+    tools.className = 'xp-tools';
+    const note = document.createElement('textarea');
+    note.className = 'xp-note';
+    note.placeholder = 'Team notes for this section (shown in the PDF only when filled in)';
+    note.rows = 2;
+    const printNote = document.createElement('div');
+    printNote.className = 'xp-note-print';
+    const inc = document.createElement('label');
+    inc.className = 'xp-include';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = true;
+    inc.appendChild(cb);
+    inc.appendChild(document.createTextNode('Include in export'));
+    note.addEventListener('input', () => {
+      const t = note.value.trim();
+      printNote.textContent = t;
+      sec.classList.toggle('xp-has-note', !!t);
+    });
+    cb.addEventListener('change', () => {
+      sec.classList.toggle('xp-excluded', !cb.checked);
+      const grid = document.getElementById('xpChartGrid');
+      grid.classList.toggle('xp-empty', ![...grid.querySelectorAll('.xp-section')].some(c => !c.classList.contains('xp-excluded')));
+    });
+    tools.appendChild(inc);
+    tools.appendChild(note);
+    tools.appendChild(printNote);
+    sec.appendChild(tools);
   }
   function buildXpWarehousePicker(){
     buildFridgePickerUI('xpWarehousePicker', () => xpFridges, set => { xpFridges = set; }, buildXpWarehousePicker, xpRefresh);
