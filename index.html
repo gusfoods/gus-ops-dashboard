@@ -423,6 +423,43 @@
     padding:10px 14px;border-radius:8px;font-family:'IBM Plex Mono',monospace;
   }
 
+
+  /* ---- Customer export tab ---- */
+  .xp-report-head{
+    display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    background:var(--kale);color:#fff;border-radius:var(--radius);padding:22px 26px;margin-bottom:18px;
+  }
+  .xp-report-head .xp-brand{display:flex;align-items:center;gap:18px;}
+  .xp-report-head .xp-logo{width:72px;height:56px;background:url('logo-white.svg') no-repeat center/contain;flex-shrink:0;}
+  .xp-report-head h2{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em;}
+  .xp-report-head .xp-sub{margin:4px 0 0;font-size:13.5px;opacity:.85;}
+  .xp-report-head .xp-meta{text-align:right;font-size:12.5px;opacity:.85;font-family:'IBM Plex Mono',monospace;line-height:1.6;}
+  .xp-title-input{
+    font-family:Raleway,sans-serif;font-size:13px;color:var(--ink);background:var(--surface);
+    border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:220px;
+  }
+  .xp-intro{font-size:14px;color:var(--ink-soft);margin:0 0 18px;line-height:1.55;max-width:900px;}
+  .xp-kpi .value{font-size:30px;}
+  .xp-rank{color:var(--ink-soft);width:34px;}
+  .xp-share-bar{display:inline-block;height:8px;border-radius:4px;background:var(--kale);vertical-align:middle;margin-right:8px;}
+  @media print{
+    @page{size:A4;margin:12mm;}
+    body.xp-print *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body.xp-print header.top, body.xp-print .controls, body.xp-print .xp-controls,
+    body.xp-print #opsView, body.xp-print #custView, body.xp-print #assortView, body.xp-print #b2bView{display:none !important;}
+    body.xp-print .app{max-width:none;padding:0;}
+    body.xp-print .xp-report-head{border-radius:10px;}
+    body.xp-print .kpi-row{grid-template-columns:repeat(4,1fr);gap:10px;}
+    body.xp-print .chart-grid{grid-template-columns:1fr 1fr;gap:12px;}
+    body.xp-print .chart-card{box-shadow:none;border:1px solid var(--line);break-inside:avoid;}
+    body.xp-print .table-scroll{max-height:none !important;overflow:visible;}
+    body.xp-print table.data thead th{position:static;}
+    body.xp-print .xp-page-break{break-before:page;}
+    body.xp-print .xp-kpi .value{font-size:24px;}
+    body.xp-print .kpi .sub, body.xp-print .kpi-delta{font-size:10.5px;}
+    body.xp-print .xp-intro{font-size:12.5px;}
+    body.xp-print #xpView .chart-grid{break-before:page;}
+  }
   @media print{
     #uploadScreen, .controls .seg, .cal-picker, .controls select, .file-status button,
     .threshold-input, footer.note{ display:none !important; }
@@ -483,6 +520,7 @@
         <button data-view="cust">Customers</button>
         <button data-view="assort">Assortment</button>
         <button data-view="b2b">B2B Customers</button>
+        <button data-view="xp">Customer export</button>
       </div>
     </div>
 
@@ -823,6 +861,101 @@
 
       <footer class="note">One row per fridge/delivery location. Fridge sales come from fridge orders at that site; subscription fees and room service come from posted FEES/ROOM invoices, attributed to the location via the invoice's delivery address (correctable in the location_map table). Credit notes are deducted; amounts are untaxed; months follow the invoice date.</footer>
     </div><!-- /b2bView -->
+    <div id="xpView" style="display:none;">
+      <div class="controls sticky xp-controls">
+        <div class="seg" id="xpGranSeg">
+          <button data-gran="day">Day</button>
+          <button data-gran="week" class="active">Week</button>
+          <button data-gran="month">Month</button>
+        </div>
+        <div id="xpWarehousePicker" class="period-picker"></div>
+        <div id="xpRangePicker"></div>
+        <select id="xpCompareSelect">
+          <option value="off">No comparison</option>
+          <option value="prev">vs previous period</option>
+          <option value="yoy">vs same period last year</option>
+          <option value="custom">vs custom period…</option>
+        </select>
+        <div id="xpCompareRangePicker" style="display:none;"></div>
+        <input type="text" id="xpTitle" class="xp-title-input" placeholder="Report title (e.g. customer name)" />
+        <div class="spacer"></div>
+        <span class="file-status" id="xpRangeLabel"></span>
+        <button class="btn" id="xpExportBtn" type="button">Export PDF</button>
+      </div>
+
+      <div class="xp-report-head">
+        <div class="xp-brand">
+          <div class="xp-logo"></div>
+          <div>
+            <h2 id="xpHeadTitle">Fridge report</h2>
+            <p class="xp-sub" id="xpHeadSub">—</p>
+          </div>
+        </div>
+        <div class="xp-meta">
+          <div id="xpHeadPeriod">—</div>
+          <div id="xpHeadGenerated">—</div>
+        </div>
+      </div>
+      <p class="xp-intro">How your colleagues use the Gus fridge: how many people buy, how often they come back, and what they
+         like most. Customers are counted as unique buyers; no personal data is shown.</p>
+
+      <div class="kpi-row">
+        <div class="kpi rev xp-kpi">
+          <div class="label">Unique customers</div>
+          <div class="value" id="xkpiBuyers">—</div>
+          <div class="sub">people who bought at least once</div>
+          <div class="kpi-delta" id="xkpiBuyersDelta"></div>
+        </div>
+        <div class="kpi units xp-kpi">
+          <div class="label">New customers</div>
+          <div class="value" id="xkpiNew">—</div>
+          <div class="sub">first-ever purchase in this period</div>
+          <div class="kpi-delta" id="xkpiNewDelta"></div>
+        </div>
+        <div class="kpi scrap xp-kpi">
+          <div class="label">Purchases</div>
+          <div class="value" id="xkpiOrders">—</div>
+          <div class="sub" id="xkpiOrdersSub">—</div>
+          <div class="kpi-delta" id="xkpiOrdersDelta"></div>
+        </div>
+        <div class="kpi adj xp-kpi">
+          <div class="label">Visits per customer</div>
+          <div class="value" id="xkpiFreq">—</div>
+          <div class="sub">average purchases per customer</div>
+          <div class="kpi-delta" id="xkpiFreqDelta"></div>
+        </div>
+      </div>
+
+      <div class="chart-card full" style="margin-bottom:16px;">
+        <h3>New vs returning customers <span id="xpBuyersScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+        <div class="wrap"><div id="chartXpBuyers" class="chart-svg"></div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Purchases over time</h3>
+          <div class="wrap"><div id="chartXpOrders" class="chart-svg"></div></div>
+        </div>
+        <div class="chart-card">
+          <h3>Visits per customer</h3>
+          <div class="wrap"><div id="chartXpFreq" class="chart-svg"></div></div>
+        </div>
+        <div class="chart-card">
+          <h3>Busiest days of the week</h3>
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Average purchases per day</p>
+          <div class="wrap" style="height:200px;"><div id="chartXpWeekday" class="chart-svg"></div></div>
+        </div>
+        <div class="chart-card">
+          <h3>Popular categories</h3>
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Share of items sold</p>
+          <div class="wrap" style="height:260px;"><div id="chartXpCats" class="chart-svg"></div></div>
+        </div>
+      </div>
+      <div class="chart-card full xp-page-break" style="margin-top:16px;">
+        <h3>Most popular items <span id="xpProdScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
+        <div class="table-scroll" style="max-height:600px;"><table class="data" id="xpProdTable"></table></div>
+      </div>
+      <footer class="note">Figures are based on fridge purchases in the selected period. "New customers" made their first-ever purchase in this period; "returning" bought before. Visits per customer = purchases ÷ unique customers.</footer>
+    </div><!-- /xpView -->
   </div>
 
 </div>
@@ -2645,9 +2778,11 @@
     document.getElementById('custView').style.display = view === 'cust' ? '' : 'none';
     document.getElementById('assortView').style.display = view === 'assort' ? '' : 'none';
     document.getElementById('b2bView').style.display = view === 'b2b' ? '' : 'none';
+    document.getElementById('xpView').style.display = view === 'xp' ? '' : 'none';
     if(view === 'cust' && !custStarted){ custStarted = true; populateCustWarehouseSelect(); custRefresh(); }
     if(view === 'assort' && !assortStarted){ assortStarted = true; assortInit(); assortRefresh(); }
     if(view === 'b2b' && !b2bStarted){ b2bStarted = true; b2bInit(); b2bRefresh(); }
+    if(view === 'xp' && !xpStarted){ xpStarted = true; xpInit(); xpRefresh(); }
   });
 
   document.getElementById('custGranSeg').addEventListener('click', e => {
@@ -3260,6 +3395,192 @@
   const loginForm = document.getElementById('loginForm');
   const loginError = document.getElementById('loginError');
   const signOutBtn = document.getElementById('signOutBtn');
+
+
+  // ---------- Customer export tab (customer-facing, no euros) ----------
+  let xpStarted = false, xpGran = 'week';
+  let xpRange = (() => { const t = today(); return { start: new Date(t.getFullYear(), t.getMonth()-1, 1), end: new Date(t.getFullYear(), t.getMonth(), 0) }; })();
+  let xpCustomCompare = null;
+  let xpFridges = new Set();
+  let xpCompareLabel = 'vs the preceding period of equal length';
+
+  function xpInit(){
+    xpFridges = new Set(ALL_WAREHOUSES.filter(isRealFridge));
+    buildXpWarehousePicker();
+    createRangePicker('xpRangePicker', () => xpRange, r => { xpRange = r; xpRefresh(); }, MAIN_PRESETS);
+    createRangePicker('xpCompareRangePicker', () => xpCustomCompare, r => { xpCustomCompare = r; xpRefresh(); }, MAIN_PRESETS);
+    wireCompareSelect('xpCompareSelect', 'xpCompareRangePicker', xpRefresh);
+    document.getElementById('xpGranSeg').addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      xpGran = btn.dataset.gran;
+      document.querySelectorAll('#xpGranSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+      xpRefresh();
+    });
+    document.getElementById('xpTitle').addEventListener('input', xpUpdateHead);
+    document.getElementById('xpExportBtn').addEventListener('click', xpExportPdf);
+    window.addEventListener('afterprint', () => document.body.classList.remove('xp-print'));
+  }
+  function buildXpWarehousePicker(){
+    buildFridgePickerUI('xpWarehousePicker', () => xpFridges, set => { xpFridges = set; }, buildXpWarehousePicker, xpRefresh);
+  }
+  function xpScopeText(whs){
+    if(!whs) return 'All fridges';
+    if(whs.length === 1) return fridgeLabel(whs[0]);
+    if(whs.length <= 3) return whs.map(fridgeLabel).join(', ');
+    return whs.length + ' fridges';
+  }
+  function xpUpdateHead(){
+    const whs = xpFridges.size === ALL_WAREHOUSES.length ? null : [...xpFridges];
+    const title = document.getElementById('xpTitle').value.trim();
+    document.getElementById('xpHeadTitle').textContent = title || 'Fridge report';
+    document.getElementById('xpHeadSub').textContent = xpScopeText(whs) + ' · ' + { day:'daily', week:'weekly', month:'monthly' }[xpGran] + ' view';
+    document.getElementById('xpHeadPeriod').textContent = fmtRange(xpRange);
+    document.getElementById('xpHeadGenerated').textContent = 'Prepared by Gus Foods · ' + new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+  }
+  function xpExportPdf(){
+    // Print only this tab; the browser's "Save as PDF" produces the file to send.
+    const prevTitle = document.title;
+    const t = document.getElementById('xpTitle').value.trim();
+    document.title = 'Gus fridge report' + (t ? ' - ' + t : '') + ' - ' + fmtRange(xpRange);
+    document.body.classList.add('xp-print');
+    const done = () => { document.body.classList.remove('xp-print'); document.title = prevTitle; window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    window.print();
+  }
+  function xpDelta(elId, cur, prev, fmtFn){
+    renderKpiDelta(elId, cur, prev === undefined ? null : prev, fmtFn, true, xpCompareLabel);
+  }
+
+  let xpSeq = 0;
+  async function xpRefresh(){
+    if(DATA_SOURCE !== 'supabase') return;
+    const seq = ++xpSeq;
+    const whs = xpFridges.size === ALL_WAREHOUSES.length ? null : [...xpFridges];
+    const lbl = document.getElementById('xpRangeLabel');
+    lbl.textContent = 'Loading…';
+    xpUpdateHead();
+    try{
+      const keys = rangeToKeys(xpRange, xpGran);
+      if(!keys.length) return;
+      const compare = deriveCompareFor('xpCompareSelect', xpRange, xpCustomCompare);
+      xpCompareLabel = compare ? 'vs ' + fmtRange(compare) : 'vs the preceding period of equal length';
+      const len = daysBetween(xpRange.start, xpRange.end);
+      const prevEnd = compare ? compare.end : addDays(xpRange.start, -1);
+      const prevStart = compare ? compare.start : addDays(prevEnd, -len);
+
+      const [summary, daily, cur, prev, prods] = await Promise.all([
+        rpc('get_cust_summary', { p_granularity: xpGran, p_warehouses: whs }),
+        xpGran === 'day' ? Promise.resolve(null) : rpc('get_cust_summary', { p_granularity:'day', p_warehouses: whs }),
+        rpc('get_cust_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
+        rpc('get_cust_range', { p_start: isoDate(prevStart), p_end: isoDate(prevEnd), p_warehouses: whs }),
+        rpc('get_prod_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs })
+      ]);
+      if(seq !== xpSeq) return;
+      lbl.textContent = fmtRange(xpRange);
+      const scopeTxt = '(' + xpScopeText(whs) + ' · ' + fmtRange(xpRange) + ')';
+      document.getElementById('xpBuyersScope').textContent = scopeTxt;
+      document.getElementById('xpProdScope').textContent = scopeTxt;
+
+      // ---- KPIs (exact date range; unique customers cannot be summed across periods) ----
+      const freq = r => r && r.customers ? r.orders/r.customers : 0;
+      const totalUnits = prods.reduce((a,p) => a + (Number(p.units)||0), 0);
+      const itemsPerOrder = cur.orders ? totalUnits/cur.orders : 0;
+      document.getElementById('xkpiBuyers').textContent = fmtNum(cur.customers);
+      document.getElementById('xkpiNew').textContent = fmtNum(cur.new_customers);
+      document.getElementById('xkpiOrders').textContent = fmtNum(cur.orders);
+      document.getElementById('xkpiOrdersSub').textContent = fmtNum(totalUnits) + ' items · ' + itemsPerOrder.toFixed(1) + ' items per purchase';
+      document.getElementById('xkpiFreq').textContent = freq(cur).toFixed(1);
+      xpDelta('xkpiBuyersDelta', cur.customers, prev.customers, fmtNum);
+      xpDelta('xkpiNewDelta', cur.new_customers, prev.new_customers, fmtNum);
+      xpDelta('xkpiOrdersDelta', cur.orders, prev.orders, fmtNum);
+      xpDelta('xkpiFreqDelta', freq(cur), freq(prev), n => n.toFixed(2));
+
+      // ---- Trends: periods in range; drop the still-running period unless it's all we have ----
+      const byP = new Map(summary.map(r => [r.period_key, r]));
+      const inRange = keys.filter(p => byP.has(p));
+      let shown = inRange.filter(p => xpGran === 'day' || isPeriodComplete(p, xpGran));
+      if(!shown.length) shown = inRange;
+      const labels = shown.map(p => periodLabelFromKey(p, xpGran));
+      const rows = shown.map(p => byP.get(p));
+      let compRows = null;
+      if(compare){
+        const compKeys = rangeToKeys(compare, xpGran).filter(p => byP.has(p));
+        compRows = shown.map((_, i) => byP.get(compKeys[i]) || null);
+      }
+      const withComp = (mainDs, fn) =>
+        compRows ? [{ label:'Comparison', data: compRows.map(r => r ? fn(r) : 0), color: COMPARE_GREY }, mainDs] : [mainDs];
+
+      drawLineBar('chartXpBuyers', labels, [
+        { label:'New', data: rows.map(r=>Number(r.new_buyers)||0), color: getVar('--coral') },
+        { label:'Returning', data: rows.map(r=>(Number(r.buyers)||0) - (Number(r.new_buyers)||0)), color: getVar('--kale') }
+      ], { stacked:true, legend:true, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
+      const ord = r => Number(r.orders)||0;
+      drawLineBar('chartXpOrders', labels,
+        withComp({ label:'Purchases', data: rows.map(ord), color: getVar('--blueberry') }, ord),
+        { yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
+      const opb = r => r.buyers ? r.orders/r.buyers : 0;
+      drawLineBar('chartXpFreq', labels,
+        withComp({ label:'Visits per customer', data: rows.map(opb), color: getVar('--kale') }, opb),
+        { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
+
+      // ---- Busiest weekdays: average purchases per day, from the day-level series ----
+      const dayRows = (daily || summary);
+      const fromK = dayKey(xpRange.start), toK = dayKey(xpRange.end);
+      const wd = Array.from({length:7}, () => ({ sum:0, n:0 }));
+      for(const r of dayRows){
+        const k = Number(r.period_key);
+        if(k < fromK || k > toK) continue;
+        const d = new Date(Math.floor(k/10000), Math.floor(k/100)%100 - 1, k%100);
+        const i = (d.getDay()+6)%7; // Mon=0
+        wd[i].sum += Number(r.orders)||0; wd[i].n++;
+      }
+      const wdNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const wdItems = wdNames.map((n,i) => ({ label:n, value: wd[i].n ? wd[i].sum/wd[i].n : 0 })).filter(it => it.value > 0);
+      renderHBarChart('chartXpWeekday', wdItems, { color:getVar('--blueberry'), format:v=>fmtNum(v) });
+
+      // ---- Popular categories & items (units only) ----
+      const catUnits = new Map();
+      for(const p of prods){
+        const g = catGroup(p.product_category);
+        catUnits.set(g, (catUnits.get(g)||0) + (Number(p.units)||0));
+      }
+      const catItems = [...catUnits.entries()].filter(([,u]) => u > 0).sort((a,b)=>b[1]-a[1]).slice(0,10)
+        .map(([g,u]) => ({ label:g, value: totalUnits ? u/totalUnits*100 : 0 }));
+      renderHBarChart('chartXpCats', catItems, { color:getVar('--kale'), format:v=>v.toFixed(1)+'%' });
+      xpRenderProdTable(prods, totalUnits);
+    }catch(err){
+      console.error(err);
+      lbl.textContent = 'Failed to load: ' + err.message;
+    }
+  }
+
+  function xpRenderProdTable(prods, totalUnits){
+    const t = document.getElementById('xpProdTable');
+    clearNode(t);
+    t.innerHTML = '<thead><tr><th>#</th><th>Item</th><th>Category</th><th>Items sold</th><th>Share</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    const top = prods.filter(p => Number(p.units) > 0).sort((a,b)=>Number(b.units)-Number(a.units)).slice(0,20);
+    const maxU = top.length ? Number(top[0].units) : 1;
+    top.forEach((p,i) => {
+      const u = Number(p.units)||0;
+      const share = totalUnits ? u/totalUnits*100 : 0;
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="xp-rank"></td><td></td><td></td><td></td><td></td>';
+      tr.children[0].textContent = i+1;
+      tr.children[1].textContent = p.product_name;
+      tr.children[2].textContent = catGroup(p.product_category);
+      tr.children[3].textContent = fmtNum(u);
+      const bar = document.createElement('span');
+      bar.className = 'xp-share-bar';
+      bar.style.width = Math.max(4, Math.round(u/maxU*80)) + 'px';
+      tr.children[4].appendChild(bar);
+      tr.children[4].appendChild(document.createTextNode(share.toFixed(1) + '%'));
+      tb.appendChild(tr);
+    });
+    tb.childElementCount || (tb.innerHTML = '<tr><td colspan="5" style="color:var(--ink-soft);">No purchases in this range.</td></tr>');
+    t.appendChild(tb);
+  }
 
   function showLogin(){
     loginScreen.style.display = 'flex';
