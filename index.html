@@ -962,6 +962,11 @@
           <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Average purchases per day</p>
           <div class="wrap" style="height:200px;"><div id="chartXpWeekday" class="chart-svg"></div></div>
         </div>
+        <div class="chart-card xp-section" id="xpSecHours">
+          <h3>Busiest time of the day</h3>
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Average purchases per hour on an active day</p>
+          <div class="wrap" style="height:220px;"><div id="chartXpHours" class="chart-svg"></div></div>
+        </div>
         <div class="chart-card xp-section" id="xpSecCats">
           <h3>Popular categories</h3>
           <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 8px;">Share of items sold</p>
@@ -3520,12 +3525,13 @@
       const prevEnd = compare ? compare.end : addDays(xpRange.start, -1);
       const prevStart = compare ? compare.start : addDays(prevEnd, -len);
 
-      const [summary, daily, cur, prev, prods] = await Promise.all([
+      const [summary, daily, cur, prev, prods, hourly] = await Promise.all([
         rpc('get_cust_summary', { p_granularity: xpGran, p_warehouses: whs }),
         xpGran === 'day' ? Promise.resolve(null) : rpc('get_cust_summary', { p_granularity:'day', p_warehouses: whs }),
         rpc('get_cust_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
         rpc('get_cust_range', { p_start: isoDate(prevStart), p_end: isoDate(prevEnd), p_warehouses: whs }),
-        rpc('get_prod_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs })
+        rpc('get_prod_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
+        rpc('get_cust_hourly', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs })
       ]);
       if(seq !== xpSeq) return;
       lbl.textContent = fmtRange(xpRange);
@@ -3589,6 +3595,19 @@
       const wdNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
       const wdItems = wdNames.map((n,i) => ({ label:n, value: wd[i].n ? wd[i].sum/wd[i].n : 0 })).filter(it => it.value > 0);
       renderHBarChart('chartXpWeekday', wdItems, { color:getVar('--blueberry'), format:v=>fmtNum(v) });
+
+      // ---- Busiest hours: average purchases per hour on days with at least one purchase ----
+      const activeDays = Math.max(1, Number(hourly && hourly.active_days) || 1);
+      const hrs = (hourly && hourly.hours) || [];
+      // Trim quiet night hours at both ends (below 2% of the peak hour) so the
+      // working day fills the chart; always show at least 07h-18h.
+      const peak = Math.max(1, ...hrs.map(h => Number(h.orders)||0));
+      let hFrom = 7, hTo = 18;
+      hrs.forEach(h => { if(h.orders >= peak*0.02){ hFrom = Math.min(hFrom, h.hour); hTo = Math.max(hTo, h.hour); } });
+      const hShown = hrs.filter(h => h.hour >= hFrom && h.hour <= hTo);
+      renderChart('chartXpHours', hShown.map(h => pad2(h.hour) + 'h'),
+        [{ label:'Purchases', data: hShown.map(h => h.orders/activeDays), color: getVar('--coral') }],
+        { type:'bar', valueLabels:false, yFormat: v=>v.toFixed(0), tooltipFormat: v=>v.toFixed(1) + ' per day' });
 
       // ---- Popular categories & items (units only) ----
       const catUnits = new Map();
