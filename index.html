@@ -939,6 +939,7 @@
         <div class="xp-meta">
           <div id="xpHeadPeriod">—</div>
           <div id="xpHeadGenerated">—</div>
+          <div id="xpHeadSince" style="display:none;"></div>
         </div>
       </div>
       <p class="xp-intro">How your colleagues use the Gus fridge: how many people buy, how often they come back, and what they
@@ -3674,15 +3675,17 @@
       const prevEnd = compare ? compare.end : addDays(xpRange.start, -1);
       const prevStart = compare ? compare.start : addDays(prevEnd, -len);
 
-      const [summary, daily, cur, prev, prods, hourly, bench] = await Promise.all([
+      const [summary, daily, cur, prev, prods, hourly, bench, first] = await Promise.all([
         rpc('get_cust_summary', { p_granularity: xpGran, p_warehouses: whs }),
         xpGran === 'day' ? Promise.resolve(null) : rpc('get_cust_summary', { p_granularity:'day', p_warehouses: whs }),
         rpc('get_cust_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
         rpc('get_cust_range', { p_start: isoDate(prevStart), p_end: isoDate(prevEnd), p_warehouses: whs }),
         rpc('get_prod_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
         rpc('get_cust_hourly', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
-        rpc('get_cust_benchmark', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end) })
+        rpc('get_cust_benchmark', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end) }),
+        (whs && whs.length === 1) ? rpc('get_first_sale', { p_warehouses: whs }) : Promise.resolve(null)
       ]);
+      xpRenderSince(first, whs);
       if(seq !== xpSeq) return;
       lbl.textContent = fmtRange(xpRange);
       const scopeTxt = '(' + xpScopeText(whs) + ' · ' + fmtRange(xpRange) + ')';
@@ -3782,6 +3785,18 @@
     }
   }
 
+  // "Customer since" line in the report header, single-fridge selections only.
+  function xpRenderSince(first, whs){
+    const el = document.getElementById('xpHeadSince');
+    const d = first && first.first_at ? new Date(first.first_at) : null;
+    if(!d || isNaN(d) || !whs || whs.length !== 1){ el.style.display = 'none'; el.textContent = ''; return; }
+    const now = new Date();
+    const months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth()) - (now.getDate() < d.getDate() ? 1 : 0);
+    const dur = months < 12 ? months + ' month' + (months === 1 ? '' : 's')
+      : (months/12).toFixed(months % 12 === 0 ? 0 : 1).replace(/\.0$/, '') + ' year' + (months < 24 ? '' : 's');
+    el.textContent = 'Customer since ' + d.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) + ' · ' + dur;
+    el.style.display = '';
+  }
   let XP_LAST = null;
   const xpPctFmt = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 
