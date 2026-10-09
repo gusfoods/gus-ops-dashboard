@@ -995,7 +995,7 @@
           <div class="kpi-delta" id="xkpiRegularsDelta"></div>
         </div>
       </div>
-      <div class="xp-reach-empty" id="xpReachEmpty">Enter the number of colleagues on site (top bar) to show reach metrics.</div>
+      <div class="xp-reach-empty" id="xpReachEmpty">No headcount known for the selected fridge(s). Select a single fridge and enter the number of colleagues on site in the top bar; it is saved for the whole team.</div>
       </div>
 
       <div class="chart-card full xp-section" id="xpSecBuyers" style="margin-bottom:16px;">
@@ -3531,11 +3531,9 @@
     document.getElementById('xpExportBtn').addEventListener('click', xpExportPdf);
     document.querySelectorAll('#xpView .xp-section').forEach(xpAddSectionTools);
     const hc = document.getElementById('xpHeadcount');
-    hc.addEventListener('input', () => {
-      try{ const v = hc.value.trim(); v ? localStorage.setItem(xpHeadcountKey(), v) : localStorage.removeItem(xpHeadcountKey()); }catch(e){}
-      xpRenderReach();
-    });
-    xpLoadHeadcount();
+    hc.addEventListener('change', xpSaveHeadcount);
+    hc.addEventListener('keydown', e => { if(e.key === 'Enter') hc.blur(); });
+    xpLoadHeadcounts();
     // Next steps: mirror textareas into print divs; default review date in 90 days.
     document.querySelectorAll('.xp-next-field').forEach(ta => {
       const mirror = document.querySelector('.xp-next-print[data-for="' + ta.id + '"]');
@@ -3580,13 +3578,56 @@
     sec.appendChild(tools);
     if(sec.id === 'xpSecBench'){ cb.checked = false; sec.classList.add('xp-excluded'); }
   }
-  function xpHeadcountKey(){ return 'xpHeadcount:' + [...xpFridges].sort().join('|'); }
-  function xpLoadHeadcount(){
-    try{ document.getElementById('xpHeadcount').value = localStorage.getItem(xpHeadcountKey()) || ''; }catch(e){}
+  // Headcount per fridge lives in the shared site_headcount table (get_headcounts /
+  // set_headcount RPCs). The field shows the sum over the selected fridges and is
+  // editable only when exactly one fridge is selected.
+  const XP_HEADCOUNTS = new Map(); // warehouse -> headcount
+  async function xpLoadHeadcounts(){
+    try{
+      const rows = await rpc('get_headcounts');
+      XP_HEADCOUNTS.clear();
+      (rows || []).forEach(r => { if(Number(r.headcount) > 0) XP_HEADCOUNTS.set(r.warehouse, Number(r.headcount)); });
+    }catch(err){ console.error(err); }
+    xpSyncHeadcountField();
   }
-  function xpHeadcount(){ const v = Number(document.getElementById('xpHeadcount').value); return v > 0 ? v : null; }
+  function xpSelectedFridges(){ return xpFridges.size === ALL_WAREHOUSES.length ? ALL_WAREHOUSES.filter(isRealFridge) : [...xpFridges]; }
+  function xpHeadcountInfo(){
+    const sel = xpSelectedFridges();
+    let total = 0, n = 0;
+    sel.forEach(w => { const v = XP_HEADCOUNTS.get(w); if(v){ total += v; n++; } });
+    return { total: total > 0 ? total : null, withValue: n, selected: sel.length };
+  }
+  function xpHeadcount(){ return xpHeadcountInfo().total; }
+  function xpSyncHeadcountField(){
+    const el = document.getElementById('xpHeadcount');
+    const sel = xpSelectedFridges();
+    const info = xpHeadcountInfo();
+    const single = sel.length === 1;
+    el.disabled = !single;
+    el.value = info.total || '';
+    el.title = single
+      ? 'Colleagues on site for ' + fridgeLabel(sel[0]) + ' (shared with the whole team)'
+      : 'Sum over the selected fridges (' + info.withValue + ' of ' + info.selected + ' have a headcount). Select a single fridge to edit.';
+    el.placeholder = single ? 'Colleagues on site' : 'Colleagues (sum)';
+  }
+  async function xpSaveHeadcount(){
+    const sel = xpSelectedFridges();
+    if(sel.length !== 1) return;
+    const el = document.getElementById('xpHeadcount');
+    const v = Math.round(Number(el.value)) || 0;
+    el.disabled = true;
+    try{
+      await rpc('set_headcount', { p_warehouse: sel[0], p_headcount: v > 0 ? v : null });
+      if(v > 0) XP_HEADCOUNTS.set(sel[0], v); else XP_HEADCOUNTS.delete(sel[0]);
+    }catch(err){
+      console.error(err);
+      document.getElementById('xpRangeLabel').textContent = 'Could not save headcount: ' + err.message;
+    }
+    xpSyncHeadcountField();
+    xpRenderReach();
+  }
   function buildXpWarehousePicker(){
-    buildFridgePickerUI('xpWarehousePicker', () => xpFridges, set => { xpFridges = set; xpLoadHeadcount(); }, buildXpWarehousePicker, xpRefresh);
+    buildFridgePickerUI('xpWarehousePicker', () => xpFridges, set => { xpFridges = set; xpSyncHeadcountField(); }, buildXpWarehousePicker, xpRefresh);
   }
   function xpScopeText(whs){
     if(!whs) return 'All fridges';
@@ -3750,7 +3791,9 @@
     if(!XP_LAST || !hc){ sec.classList.add('xp-no-headcount'); return; }
     sec.classList.remove('xp-no-headcount');
     const { cur, prev, activeDays, scopeTxt } = XP_LAST;
-    document.getElementById('xpReachScope').textContent = scopeTxt + ' · ' + fmtNum(hc) + ' colleagues on site';
+    const info = xpHeadcountInfo();
+    document.getElementById('xpReachScope').textContent = scopeTxt + ' · ' + fmtNum(hc) + ' colleagues on site'
+      + (info.withValue < info.selected ? ' · headcount known for ' + info.withValue + ' of ' + info.selected + ' fridges' : '');
     const reach = r => r.customers / hc * 100;
     const per100 = r => r.orders / hc * 100 / activeDays;
     const regulars = r => r.customers ? (r.customers - r.new_customers) / r.customers * 100 : 0;
