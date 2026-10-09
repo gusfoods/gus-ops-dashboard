@@ -454,12 +454,40 @@
   .xp-note:focus{outline:none;border-color:var(--kale);}
   .xp-note-print{display:none;font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap;margin-top:10px;padding:10px 14px;border-left:3px solid var(--coral);background:var(--vanilla);border-radius:0 10px 10px 0;}
   .xp-section.xp-excluded{opacity:.45;}
+  .xp-reach-head{font-size:15px;font-weight:700;margin:0 0 10px;}
+  .xp-reach-empty{display:none;font-size:13px;color:var(--ink-soft);padding:12px 14px;border:1px dashed var(--line);border-radius:10px;}
+  .xp-kpi-section.xp-no-headcount .kpi-row{display:none;}
+  .xp-kpi-section.xp-no-headcount .xp-reach-empty{display:block;}
+  .xp-decomp-lead{font-size:14.5px;margin:0 0 12px;line-height:1.5;}
+  .xp-decomp{display:grid;grid-template-columns:200px 1fr 90px;gap:8px 14px;align-items:center;font-size:13px;}
+  .xp-decomp .d-name{font-weight:600;}
+  .xp-decomp .d-name small{display:block;font-weight:400;color:var(--ink-soft);font-size:11.5px;}
+  .xp-decomp .d-bar{position:relative;height:16px;background:#F1ECDF;border-radius:6px;overflow:hidden;}
+  .xp-decomp .d-bar i{position:absolute;top:0;bottom:0;border-radius:6px;}
+  .xp-decomp .d-bar i.pos{background:var(--green);}
+  .xp-decomp .d-bar i.neg{background:var(--rose);}
+  .xp-decomp .d-bar b{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--line);}
+  .xp-decomp .d-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;}
+  .xp-decomp .d-val.pos{color:var(--green);} .xp-decomp .d-val.neg{color:var(--rose);}
+  .xp-decomp-note{font-size:12px;color:var(--ink-soft);margin:12px 0 0;line-height:1.5;}
+  .xp-internal{color:var(--rose);}
+  .xp-bench-pct{display:inline-block;min-width:84px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600;text-align:center;font-family:Raleway,sans-serif;}
+  .xp-bench-pct.top{background:var(--green-pale);color:var(--green);} .xp-bench-pct.mid{background:#F1ECDF;color:var(--ink-soft);} .xp-bench-pct.low{background:var(--rose-pale);color:var(--rose);}
+  .xp-next-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .xp-field-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:6px;}
+  .xp-next-review{display:flex;align-items:center;gap:12px;margin-top:14px;}
+  .xp-next-review .xp-field-label{margin:0;}
+  .xp-review-print{display:none;font-weight:700;}
   .xp-section.xp-excluded .xp-tools{opacity:1;}
   @media print{
     @page{size:A4;margin:12mm;}
     body.xp-print .xp-section.xp-excluded, body.xp-print .xp-note, body.xp-print .xp-include, body.xp-print #xpChartGrid.xp-empty{display:none !important;}
     body.xp-print .xp-tools{border-top:none;margin-top:0;padding-top:0;}
     body.xp-print .xp-section.xp-has-note .xp-note-print{display:block;}
+    body.xp-print .xp-internal, body.xp-print #xpSecReach.xp-no-headcount, body.xp-print #xpReviewDate{display:none !important;}
+    body.xp-print .xp-next-print.xp-filled{display:block;margin-top:0;}
+    body.xp-print .xp-review-print{display:inline;}
+    body.xp-print .xp-next-grid{grid-template-columns:1fr 1fr;}
     body.xp-print *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body.xp-print header.top, body.xp-print .controls, body.xp-print .xp-controls,
     body.xp-print #opsView, body.xp-print #custView, body.xp-print #assortView, body.xp-print #b2bView{display:none !important;}
@@ -894,6 +922,7 @@
         </select>
         <div id="xpCompareRangePicker" style="display:none;"></div>
         <input type="text" id="xpTitle" class="xp-title-input" placeholder="Report title (e.g. customer name)" />
+        <input type="number" id="xpHeadcount" class="xp-title-input" style="min-width:150px;" min="1" step="1" placeholder="Colleagues on site" title="Headcount at this site - used for reach metrics" />
         <div class="spacer"></div>
         <span class="file-status" id="xpRangeLabel"></span>
         <button class="btn" id="xpExportBtn" type="button">Export PDF</button>
@@ -944,9 +973,41 @@
       </div>
       </div>
 
+      <div class="xp-section xp-kpi-section" id="xpSecReach">
+      <div class="xp-reach-head">Reach <span id="xpReachScope" style="font-weight:400;color:var(--ink-soft);"></span></div>
+      <div class="kpi-row" id="xpReachRow">
+        <div class="kpi rev xp-kpi">
+          <div class="label">Colleagues using the fridge</div>
+          <div class="value" id="xkpiReach">—</div>
+          <div class="sub" id="xkpiReachSub">share of colleagues on site who bought</div>
+          <div class="kpi-delta" id="xkpiReachDelta"></div>
+        </div>
+        <div class="kpi units xp-kpi">
+          <div class="label">Purchases per 100 colleagues</div>
+          <div class="value" id="xkpiPer100">—</div>
+          <div class="sub">per active day</div>
+          <div class="kpi-delta" id="xkpiPer100Delta"></div>
+        </div>
+        <div class="kpi scrap xp-kpi">
+          <div class="label">Regulars</div>
+          <div class="value" id="xkpiRegulars">—</div>
+          <div class="sub">share of buyers who bought before this period</div>
+          <div class="kpi-delta" id="xkpiRegularsDelta"></div>
+        </div>
+      </div>
+      <div class="xp-reach-empty" id="xpReachEmpty">Enter the number of colleagues on site (top bar) to show reach metrics.</div>
+      </div>
+
       <div class="chart-card full xp-section" id="xpSecBuyers" style="margin-bottom:16px;">
         <h3>New vs returning customers <span id="xpBuyersScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
         <div class="wrap"><div id="chartXpBuyers" class="chart-svg"></div></div>
+      </div>
+
+      <div class="chart-card full xp-section" id="xpSecDecomp" style="margin-bottom:16px;">
+        <h3>What changed <span id="xpDecompScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+        <p class="xp-decomp-lead" id="xpDecompLead">—</p>
+        <div class="xp-decomp" id="xpDecompRows"></div>
+        <p class="xp-decomp-note" id="xpDecompNote"></p>
       </div>
       <div class="chart-grid" id="xpChartGrid">
         <div class="chart-card xp-section" id="xpSecOrders">
@@ -973,9 +1034,35 @@
           <div class="wrap" style="height:260px;"><div id="chartXpCats" class="chart-svg"></div></div>
         </div>
       </div>
+      <div class="chart-card full xp-section" id="xpSecBench" style="margin-top:16px;">
+        <h3>How this fridge compares <span id="xpBenchScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;" id="xpBenchIntro">Compared with other Gus fridges of similar size over the same period. Peers are anonymous.</p>
+        <div class="table-scroll"><table class="data" id="xpBenchTable"></table></div>
+        <p class="xp-decomp-note xp-internal">Internal check: this section is excluded from the export by default. Include it only when the comparison supports the story you want to tell.</p>
+      </div>
       <div class="chart-card full xp-page-break xp-section" id="xpSecProd" style="margin-top:16px;">
         <h3>Most popular items <span id="xpProdScope" style="font-weight:400;color:var(--ink-soft);"></span></h3>
         <div class="table-scroll" style="max-height:600px;"><table class="data" id="xpProdTable"></table></div>
+      </div>
+      <div class="chart-card full xp-section" id="xpSecNext" data-xp-nonote="1" style="margin-top:16px;">
+        <h3>Next steps</h3>
+        <div class="xp-next-grid">
+          <div>
+            <label class="xp-field-label">What we saw</label>
+            <textarea class="xp-note xp-next-field" id="xpNextSaw" rows="3" placeholder="Auto-filled from the analysis above; edit freely"></textarea>
+            <div class="xp-note-print xp-next-print" data-for="xpNextSaw"></div>
+          </div>
+          <div>
+            <label class="xp-field-label">What we will do</label>
+            <textarea class="xp-note xp-next-field" id="xpNextDo" rows="3" placeholder="Suggested actions appear here; edit freely"></textarea>
+            <div class="xp-note-print xp-next-print" data-for="xpNextDo"></div>
+          </div>
+        </div>
+        <div class="xp-next-review">
+          <label class="xp-field-label" for="xpReviewDate">We review together on</label>
+          <input type="date" id="xpReviewDate" class="xp-title-input" style="min-width:160px;" />
+          <span class="xp-review-print" id="xpReviewPrint"></span>
+        </div>
       </div>
       <footer class="note">Figures are based on fridge purchases in the selected period. "New customers" made their first-ever purchase in this period; "returning" bought before. Visits per customer = purchases ÷ unique customers.</footer>
     </div><!-- /xpView -->
@@ -3443,6 +3530,21 @@
     document.getElementById('xpTitle').addEventListener('input', xpUpdateHead);
     document.getElementById('xpExportBtn').addEventListener('click', xpExportPdf);
     document.querySelectorAll('#xpView .xp-section').forEach(xpAddSectionTools);
+    const hc = document.getElementById('xpHeadcount');
+    hc.addEventListener('input', () => {
+      try{ const v = hc.value.trim(); v ? localStorage.setItem(xpHeadcountKey(), v) : localStorage.removeItem(xpHeadcountKey()); }catch(e){}
+      xpRenderReach();
+    });
+    xpLoadHeadcount();
+    // Next steps: mirror textareas into print divs; default review date in 90 days.
+    document.querySelectorAll('.xp-next-field').forEach(ta => {
+      const mirror = document.querySelector('.xp-next-print[data-for="' + ta.id + '"]');
+      ta.addEventListener('input', () => { mirror.textContent = ta.value.trim(); mirror.classList.toggle('xp-filled', !!ta.value.trim()); });
+    });
+    const rd = document.getElementById('xpReviewDate');
+    rd.value = isoDate(addDays(today(), 90));
+    const syncReview = () => { const d = rd.value ? new Date(rd.value + 'T00:00:00') : null; document.getElementById('xpReviewPrint').textContent = d ? d.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : ''; };
+    rd.addEventListener('input', syncReview); syncReview();
     window.addEventListener('afterprint', () => document.body.classList.remove('xp-print'));
   }
   // Per-section "Team notes" + "Include in export". Empty notes and unchecked
@@ -3450,6 +3552,7 @@
   function xpAddSectionTools(sec){
     const tools = document.createElement('div');
     tools.className = 'xp-tools';
+    const noNote = !!sec.dataset.xpNonote;
     const note = document.createElement('textarea');
     note.className = 'xp-note';
     note.placeholder = 'Team notes for this section (shown in the PDF only when filled in)';
@@ -3473,12 +3576,17 @@
       grid.classList.toggle('xp-empty', ![...grid.querySelectorAll('.xp-section')].some(c => !c.classList.contains('xp-excluded')));
     });
     tools.appendChild(inc);
-    tools.appendChild(note);
-    tools.appendChild(printNote);
+    if(!noNote){ tools.appendChild(note); tools.appendChild(printNote); }
     sec.appendChild(tools);
+    if(sec.id === 'xpSecBench'){ cb.checked = false; sec.classList.add('xp-excluded'); }
   }
+  function xpHeadcountKey(){ return 'xpHeadcount:' + [...xpFridges].sort().join('|'); }
+  function xpLoadHeadcount(){
+    try{ document.getElementById('xpHeadcount').value = localStorage.getItem(xpHeadcountKey()) || ''; }catch(e){}
+  }
+  function xpHeadcount(){ const v = Number(document.getElementById('xpHeadcount').value); return v > 0 ? v : null; }
   function buildXpWarehousePicker(){
-    buildFridgePickerUI('xpWarehousePicker', () => xpFridges, set => { xpFridges = set; }, buildXpWarehousePicker, xpRefresh);
+    buildFridgePickerUI('xpWarehousePicker', () => xpFridges, set => { xpFridges = set; xpLoadHeadcount(); }, buildXpWarehousePicker, xpRefresh);
   }
   function xpScopeText(whs){
     if(!whs) return 'All fridges';
@@ -3525,13 +3633,14 @@
       const prevEnd = compare ? compare.end : addDays(xpRange.start, -1);
       const prevStart = compare ? compare.start : addDays(prevEnd, -len);
 
-      const [summary, daily, cur, prev, prods, hourly] = await Promise.all([
+      const [summary, daily, cur, prev, prods, hourly, bench] = await Promise.all([
         rpc('get_cust_summary', { p_granularity: xpGran, p_warehouses: whs }),
         xpGran === 'day' ? Promise.resolve(null) : rpc('get_cust_summary', { p_granularity:'day', p_warehouses: whs }),
         rpc('get_cust_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
         rpc('get_cust_range', { p_start: isoDate(prevStart), p_end: isoDate(prevEnd), p_warehouses: whs }),
         rpc('get_prod_range', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
-        rpc('get_cust_hourly', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs })
+        rpc('get_cust_hourly', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end), p_warehouses: whs }),
+        rpc('get_cust_benchmark', { p_start: isoDate(xpRange.start), p_end: isoDate(xpRange.end) })
       ]);
       if(seq !== xpSeq) return;
       lbl.textContent = fmtRange(xpRange);
@@ -3619,10 +3728,179 @@
         .map(([g,u]) => ({ label:g, value: totalUnits ? u/totalUnits*100 : 0 }));
       renderHBarChart('chartXpCats', catItems, { color:getVar('--kale'), format:v=>v.toFixed(1)+'%' });
       xpRenderProdTable(prods, totalUnits);
+
+      // ---- Reach, decomposition, benchmark, next steps ----
+      XP_LAST = { cur, prev, activeDays, whs, scopeTxt };
+      xpRenderReach();
+      const drivers = xpRenderDecomp(cur, prev, scopeTxt);
+      xpRenderBench(bench, cur, whs, scopeTxt);
+      xpPrefillNext(drivers, cur, prev);
     }catch(err){
       console.error(err);
       lbl.textContent = 'Failed to load: ' + err.message;
     }
+  }
+
+  let XP_LAST = null;
+  const xpPctFmt = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+
+  function xpRenderReach(){
+    const sec = document.getElementById('xpSecReach');
+    const hc = xpHeadcount();
+    if(!XP_LAST || !hc){ sec.classList.add('xp-no-headcount'); return; }
+    sec.classList.remove('xp-no-headcount');
+    const { cur, prev, activeDays, scopeTxt } = XP_LAST;
+    document.getElementById('xpReachScope').textContent = scopeTxt + ' · ' + fmtNum(hc) + ' colleagues on site';
+    const reach = r => r.customers / hc * 100;
+    const per100 = r => r.orders / hc * 100 / activeDays;
+    const regulars = r => r.customers ? (r.customers - r.new_customers) / r.customers * 100 : 0;
+    document.getElementById('xkpiReach').textContent = Math.min(reach(cur), 100).toFixed(0) + '%';
+    document.getElementById('xkpiReachSub').textContent = fmtNum(cur.customers) + ' of ' + fmtNum(hc) + ' colleagues bought at least once';
+    document.getElementById('xkpiPer100').textContent = per100(cur).toFixed(1);
+    document.getElementById('xkpiRegulars').textContent = regulars(cur).toFixed(0) + '%';
+    const pp = n => n.toFixed(1) + ' pp';
+    renderKpiDelta('xkpiReachDelta', reach(cur), prev.customers !== undefined ? reach(prev) : null, v => v.toFixed(1) + '%', true, xpCompareLabel);
+    renderKpiDelta('xkpiPer100Delta', per100(cur), prev.orders !== undefined ? prev.orders / hc * 100 / activeDays : null, v => v.toFixed(1), true, xpCompareLabel);
+    renderKpiDelta('xkpiRegularsDelta', regulars(cur), prev.customers ? regulars(prev) : null, v => v.toFixed(1) + '%', true, xpCompareLabel);
+  }
+
+  // Attributes the change in items bought to three levers via log decomposition:
+  // items = customers x (purchases/customer) x (items/purchase).
+  const XP_LEVERS = {
+    customers: { name:'Number of customers', hint:'colleagues who bought at least once',
+      down:'Fewer colleagues bought from the fridge. This usually follows office attendance or awareness rather than price.',
+      up:'More colleagues bought from the fridge.',
+      act:'Relaunch internal communication about the fridge and onboard new joiners; check placement and signage; align with office-attendance days.' },
+    freq: { name:'Visits per customer', hint:'how often buyers came back',
+      down:'Regular users came by less often. This usually points to assortment fatigue.',
+      up:'Regular users came by more often.',
+      act:'Rotate the assortment and add seasonal items; ask colleagues for their favourites and bring them in.' },
+    basket: { name:'Items per purchase', hint:'how much people take per visit',
+      down:'People took fewer items per visit. This is the lever most sensitive to price.',
+      up:'People took more items per visit.',
+      act:'Review price points of the top sellers; offer bundles or a benefit top-up so colleagues keep their usual basket.' }
+  };
+  function xpRenderDecomp(cur, prev, scopeTxt){
+    const rows = document.getElementById('xpDecompRows');
+    const lead = document.getElementById('xpDecompLead');
+    const note = document.getElementById('xpDecompNote');
+    clearNode(rows);
+    document.getElementById('xpDecompScope').textContent = scopeTxt + ' ' + xpCompareLabel;
+    const c0 = Number(prev.customers)||0, c1 = Number(cur.customers)||0;
+    const o0 = Number(prev.orders)||0,    o1 = Number(cur.orders)||0;
+    const u0 = Number(prev.units)||0,     u1 = Number(cur.units)||0;
+    if(!(c0 && o0 && u0 && c1 && o1 && u1)){
+      lead.textContent = 'Not enough data in the comparison period to explain the change.';
+      note.textContent = '';
+      return null;
+    }
+    const f0 = o0/c0, f1 = o1/c1, b0 = u0/o0, b1 = u1/o1;
+    const l = { customers: Math.log(c1/c0), freq: Math.log(f1/f0), basket: Math.log(b1/b0) };
+    const lt = l.customers + l.freq + l.basket; // = ln(u1/u0)
+    const dU = u1 - u0;
+    const pct = { customers:(c1/c0-1)*100, freq:(f1/f0-1)*100, basket:(b1/b0-1)*100 };
+    const contrib = {};
+    for(const k in l) contrib[k] = Math.abs(lt) > 1e-9 ? dU * (l[k]/lt) : 0;
+    const order = ['customers','freq','basket'].sort((a,b) => Math.abs(l[b]) - Math.abs(l[a]));
+    const maxAbs = Math.max(1e-9, ...order.map(k => Math.abs(contrib[k])));
+    const totalPct = (u1/u0-1)*100;
+    lead.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = 'Items bought ' + (dU >= 0 ? 'went up ' : 'went down ') + Math.abs(totalPct).toFixed(1) + '% (' + (dU>=0?'+':'') + fmtNum(dU) + ' items)';
+    lead.appendChild(b);
+    lead.appendChild(document.createTextNode(' compared with the previous period. ' + XP_LEVERS[order[0]][l[order[0]] < 0 ? 'down' : 'up'] + (Math.abs(l[order[0]]) > 0.02 ? ' That is the main driver.' : ' Changes are small across the board.')));
+    for(const k of order){
+      const L = XP_LEVERS[k];
+      const name = document.createElement('div'); name.className = 'd-name';
+      name.textContent = L.name;
+      const small = document.createElement('small'); small.textContent = L.hint; name.appendChild(small);
+      const bar = document.createElement('div'); bar.className = 'd-bar';
+      const mid = document.createElement('b'); bar.appendChild(mid);
+      const fill = document.createElement('i');
+      const w = Math.abs(contrib[k]) / maxAbs * 50;
+      fill.className = contrib[k] >= 0 ? 'pos' : 'neg';
+      fill.style.width = w.toFixed(1) + '%';
+      if(contrib[k] >= 0) fill.style.left = '50%'; else fill.style.right = '50%';
+      bar.appendChild(fill);
+      const val = document.createElement('div'); val.className = 'd-val ' + (pct[k] >= 0 ? 'pos' : 'neg');
+      val.textContent = xpPctFmt(pct[k]);
+      val.title = (contrib[k]>=0?'+':'') + fmtNum(contrib[k]) + ' items attributable to this lever';
+      rows.appendChild(name); rows.appendChild(bar); rows.appendChild(val);
+    }
+    note.textContent = 'Bars show how much of the change in items bought each lever explains. Percentages are the change in each lever itself.';
+    return { order, l, pct, contrib, totalPct, dU };
+  }
+
+  function xpRenderBench(bench, cur, whs, scopeTxt){
+    const t = document.getElementById('xpBenchTable');
+    clearNode(t);
+    const selected = new Set(whs || ALL_WAREHOUSES);
+    const peers = (bench || []).filter(r => !selected.has(r.warehouse) && isRealFridge(r.warehouse) && Number(r.customers) > 0);
+    const nSel = Math.max(1, selected.size);
+    const mine = {
+      customers: Number(cur.customers)/nSel,
+      freq: cur.customers ? cur.orders/cur.customers : 0,
+      basket: cur.orders ? cur.units/cur.orders : 0,
+      regulars: cur.customers ? (cur.customers - cur.new_customers)/cur.customers*100 : 0
+    };
+    // Similar size = peers with 0.5x-2x our customers per fridge; fall back to all peers.
+    let pool = peers.filter(r => Number(r.customers) >= mine.customers*0.5 && Number(r.customers) <= mine.customers*2);
+    let poolLabel = 'fridges of similar size';
+    if(pool.length < 5){ pool = peers; poolLabel = 'all Gus fridges'; }
+    document.getElementById('xpBenchScope').textContent = scopeTxt;
+    document.getElementById('xpBenchIntro').textContent = 'Compared with ' + pool.length + ' other ' + poolLabel + ' over the same period. Peers are anonymous.';
+    if(pool.length < 3 || !cur.customers){
+      t.innerHTML = '<tbody><tr><td style="color:var(--ink-soft);">Not enough comparable fridges for this period.</td></tr></tbody>';
+      return;
+    }
+    const metrics = [
+      { key:'freq',     name:'Visits per customer', fmt:v=>v.toFixed(1), val:r=>r.orders/r.customers },
+      { key:'basket',   name:'Items per purchase',  fmt:v=>v.toFixed(1), val:r=>r.orders ? r.units/r.orders : 0 },
+      { key:'regulars', name:'Share of regulars',   fmt:v=>v.toFixed(0)+'%', val:r=>Number(r.returning)/Number(r.customers)*100 },
+      { key:'customers',name:'Customers per fridge',fmt:v=>fmtNum(v), val:r=>Number(r.customers) }
+    ];
+    t.innerHTML = '<thead><tr><th>Metric</th><th>This fridge</th><th>Peer median</th><th>Peer top 25%</th><th>Position</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    const q = (arr, p) => { const a = [...arr].sort((x,y)=>x-y); const i = (a.length-1)*p; const lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi]-a[lo])*(i-lo); };
+    metrics.forEach(m => {
+      const vals = pool.map(m.val).filter(v => isFinite(v));
+      const me = mine[m.key];
+      const below = vals.filter(v => v < me).length;
+      const pctile = vals.length ? below / vals.length * 100 : 0;
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td></td><td></td><td></td><td></td><td></td>';
+      tr.children[0].textContent = m.name;
+      tr.children[1].textContent = m.fmt(me);
+      tr.children[1].style.fontWeight = '700';
+      tr.children[2].textContent = m.fmt(q(vals, 0.5));
+      tr.children[3].textContent = m.fmt(q(vals, 0.75));
+      const tag = document.createElement('span');
+      const cls = pctile >= 66 ? 'top' : (pctile >= 33 ? 'mid' : 'low');
+      tag.className = 'xp-bench-pct ' + cls;
+      tag.textContent = cls === 'top' ? 'Top third' : (cls === 'mid' ? 'Middle' : 'Bottom third');
+      tag.title = 'Better than ' + pctile.toFixed(0) + '% of peers';
+      tr.children[4].appendChild(tag);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+  }
+
+  let xpNextAuto = { saw:'', do:'' };
+  function xpPrefillNext(drivers, cur, prev){
+    const saw = document.getElementById('xpNextSaw'), doEl = document.getElementById('xpNextDo');
+    let sawTxt = '', doTxt = '';
+    if(drivers){
+      const main = drivers.order[0], L = XP_LEVERS[main], down = drivers.l[main] < 0;
+      sawTxt = 'Items bought ' + (drivers.dU >= 0 ? 'rose ' : 'fell ') + Math.abs(drivers.totalPct).toFixed(0) + '% versus the previous period. '
+        + L[down ? 'down' : 'up'] + ' ' + L.name + ' moved ' + xpPctFmt(drivers.pct[main]) + '.';
+      const acts = drivers.order.filter(k => drivers.l[k] < -0.02).map(k => '• ' + XP_LEVERS[k].act);
+      doTxt = acts.length ? acts.join('\n') : '• Keep the current set-up and check in again at the review date.';
+    }
+    // Only overwrite text the team has not edited.
+    [[saw, 'saw', sawTxt], [doEl, 'do', doTxt]].forEach(([el, k, txt]) => {
+      if(el.value.trim() === '' || el.value === xpNextAuto[k]){ el.value = txt; el.dispatchEvent(new Event('input')); }
+      xpNextAuto[k] = txt;
+    });
   }
 
   function xpRenderProdTable(prods, totalUnits){
