@@ -502,7 +502,7 @@
     body.xp-print .xp-kpi .value{font-size:24px;}
     body.xp-print .kpi .sub, body.xp-print .kpi-delta{font-size:10.5px;}
     body.xp-print .xp-intro{font-size:12.5px;}
-    body.xp-print #xpView .chart-grid{break-before:page;}
+    body.xp-print #xpChartGrid{break-before:page;}
   }
   @media print{
     #uploadScreen, .controls .seg, .cal-picker, .controls select, .file-status button,
@@ -999,9 +999,15 @@
       <div class="xp-reach-empty" id="xpReachEmpty">No headcount known for the selected fridge(s). Select a single fridge and enter the number of colleagues on site in the top bar; it is saved for the whole team.</div>
       </div>
 
-      <div class="chart-card full xp-section" id="xpSecBuyers" style="margin-bottom:16px;">
-        <h3>New vs returning customers <span id="xpBuyersScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
-        <div class="wrap"><div id="chartXpBuyers" class="chart-svg"></div></div>
+      <div class="chart-grid" id="xpTopGrid" style="margin-bottom:16px;">
+        <div class="chart-card xp-section" id="xpSecBuyers">
+          <h3>New vs returning customers <span id="xpBuyersScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+          <div class="wrap"><div id="chartXpBuyers" class="chart-svg"></div></div>
+        </div>
+        <div class="chart-card xp-section" id="xpSecUnits">
+          <h3>Items sold <span id="xpUnitsScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
+          <div class="wrap"><div id="chartXpUnits" class="chart-svg"></div></div>
+        </div>
       </div>
 
       <div class="chart-card full xp-section" id="xpSecDecomp" style="margin-bottom:16px;">
@@ -3690,6 +3696,7 @@
       lbl.textContent = fmtRange(xpRange);
       const scopeTxt = '(' + xpScopeText(whs) + ' · ' + fmtRange(xpRange) + ')';
       document.getElementById('xpBuyersScope').textContent = scopeTxt;
+      document.getElementById('xpUnitsScope').textContent = scopeTxt;
       document.getElementById('xpProdScope').textContent = scopeTxt;
 
       // ---- KPIs (exact date range; unique customers cannot be summed across periods) ----
@@ -3725,6 +3732,10 @@
         { label:'New', data: rows.map(r=>Number(r.new_buyers)||0), color: getVar('--coral') },
         { label:'Returning', data: rows.map(r=>(Number(r.buyers)||0) - (Number(r.new_buyers)||0)), color: getVar('--kale') }
       ], { stacked:true, legend:true, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
+      const unitsOf = r => Number(r.units)||0;
+      drawLineBar('chartXpUnits', labels,
+        withComp({ label:'Items sold', data: rows.map(unitsOf), color: getVar('--coral') }, unitsOf),
+        { yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
       const ord = r => Number(r.orders)||0;
       drawLineBar('chartXpOrders', labels,
         withComp({ label:'Purchases', data: rows.map(ord), color: getVar('--blueberry') }, ord),
