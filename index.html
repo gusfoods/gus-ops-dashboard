@@ -446,6 +446,7 @@
   .xp-kpi-section .kpi-row{margin-bottom:0;}
   .xp-tools{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);}
   .xp-include{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);cursor:pointer;user-select:none;align-self:flex-end;}
+  .xp-tools-row{display:flex;justify-content:flex-end;gap:16px;}
   .xp-include input{margin:0;accent-color:var(--kale);}
   .xp-note{
     width:100%;min-height:54px;resize:vertical;font-family:Raleway,sans-serif;font-size:13px;line-height:1.5;color:var(--ink);
@@ -1000,11 +1001,11 @@
       </div>
 
       <div class="chart-grid" id="xpTopGrid" style="margin-bottom:16px;">
-        <div class="chart-card xp-section" id="xpSecBuyers">
+        <div class="chart-card xp-section" id="xpSecBuyers" data-xp-trend="1" data-xp-chart="chartXpBuyers">
           <h3>New vs returning customers <span id="xpBuyersScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
           <div class="wrap"><div id="chartXpBuyers" class="chart-svg"></div></div>
         </div>
-        <div class="chart-card xp-section" id="xpSecUnits">
+        <div class="chart-card xp-section" id="xpSecUnits" data-xp-trend="1" data-xp-chart="chartXpUnits">
           <h3>Items sold <span id="xpUnitsScope" style="font-weight:400;font-size:12px;color:var(--ink-soft);"></span></h3>
           <div class="wrap"><div id="chartXpUnits" class="chart-svg"></div></div>
         </div>
@@ -1017,11 +1018,11 @@
         <p class="xp-decomp-note" id="xpDecompNote"></p>
       </div>
       <div class="chart-grid" id="xpChartGrid">
-        <div class="chart-card xp-section" id="xpSecOrders">
+        <div class="chart-card xp-section" id="xpSecOrders" data-xp-trend="1" data-xp-chart="chartXpOrders">
           <h3>Purchases over time</h3>
           <div class="wrap"><div id="chartXpOrders" class="chart-svg"></div></div>
         </div>
-        <div class="chart-card xp-section" id="xpSecFreq">
+        <div class="chart-card xp-section" id="xpSecFreq" data-xp-trend="1" data-xp-chart="chartXpFreq">
           <h3>Visits per customer</h3>
           <div class="wrap"><div id="chartXpFreq" class="chart-svg"></div></div>
         </div>
@@ -2554,6 +2555,22 @@
   function clearNode(node){ while(node.firstChild) node.removeChild(node.firstChild); }
 
   // Generic bar/line chart renderer (no external dependency). datasets: [{label,data,color}]
+  // Least-squares straight line over one value per label, drawn on top of the chart.
+  // Dashed, muted colour so it reads as an annotation rather than a series.
+  function appendTrendLine(svg, values, xOf, yOf, color){
+    const pts = values.map((v,i) => [i, Number(v)||0]);
+    const n = pts.length;
+    if(n < 2) return;
+    const sx = pts.reduce((a,p)=>a+p[0],0), sy = pts.reduce((a,p)=>a+p[1],0);
+    const sxx = pts.reduce((a,p)=>a+p[0]*p[0],0), sxy = pts.reduce((a,p)=>a+p[0]*p[1],0);
+    const den = n*sxx - sx*sx;
+    if(!den) return;
+    const slope = (n*sxy - sx*sy)/den, icpt = (sy - slope*sx)/n;
+    const y0 = yOf(icpt), y1 = yOf(icpt + slope*(n-1));
+    svg.appendChild(svgEl('line', { x1:xOf(0).toFixed(1), y1:y0.toFixed(1), x2:xOf(n-1).toFixed(1), y2:y1.toFixed(1),
+      stroke: color || '#5B6B72', 'stroke-width':2, 'stroke-dasharray':'6,4', 'stroke-linecap':'round', opacity:0.85, 'pointer-events':'none' }));
+  }
+
   function renderChart(containerId, labels, datasets, opts){
     opts = opts || {};
     const container = document.getElementById(containerId);
@@ -2645,6 +2662,10 @@
           lx += 13 + (ds.label.length*5.5) + 16;
         });
       }
+      if(opts.trend){
+        appendTrendLine(svg, totals, i => paddingLeft + slotW*(i+0.5),
+          v => Math.min(paddingTop+innerH, Math.max(paddingTop, paddingTop + innerH*(1 - (v-minV)/range))), opts.trendColor);
+      }
       // x labels
       const minGapS = 46;
       let lastXs = -Infinity;
@@ -2724,6 +2745,11 @@
 
     if(minV < 0){
       svg.appendChild(svgEl('line', { x1:paddingLeft, x2:width-paddingRight, y1:zeroY, y2:zeroY, stroke:'#C7D2D4', 'stroke-width':1 }));
+    }
+    if(opts.trend && datasets.length){
+      const main = datasets[datasets.length-1];
+      appendTrendLine(svg, main.data, i => paddingLeft + slotW*(i+0.5),
+        v => Math.min(paddingTop+innerH, Math.max(paddingTop, paddingTop + innerH*(1 - (v-minV)/range))), opts.trendColor);
     }
 
     if(thresholdVal !== null){
@@ -3552,6 +3578,18 @@
     rd.addEventListener('input', syncReview); syncReview();
     window.addEventListener('afterprint', () => document.body.classList.remove('xp-print'));
   }
+  // Trendline toggle per period chart. The last draw call per chart is cached so a
+  // toggle redraws from memory instead of refetching.
+  const XP_TREND = new Set();            // chart ids with the trendline on
+  const XP_LAST_DRAW = new Map();        // chart id -> [labels, series, opts]
+  function xpBar(chartId, labels, series, opts){
+    XP_LAST_DRAW.set(chartId, [labels, series, opts]);
+    drawLineBar(chartId, labels, series, Object.assign({}, opts, { trend: XP_TREND.has(chartId) }));
+  }
+  function xpRedraw(chartId){
+    const a = XP_LAST_DRAW.get(chartId);
+    if(a) xpBar(chartId, a[0], a[1], a[2]);
+  }
   // Per-section "Team notes" + "Include in export". Empty notes and unchecked
   // sections are dropped from the PDF via body.xp-print CSS rules.
   function xpAddSectionTools(sec){
@@ -3580,7 +3618,23 @@
       const grid = document.getElementById('xpChartGrid');
       grid.classList.toggle('xp-empty', ![...grid.querySelectorAll('.xp-section')].some(c => !c.classList.contains('xp-excluded')));
     });
-    tools.appendChild(inc);
+    const row = document.createElement('div');
+    row.className = 'xp-tools-row';
+    if(sec.dataset.xpTrend){
+      const tr = document.createElement('label');
+      tr.className = 'xp-include';
+      const tcb = document.createElement('input');
+      tcb.type = 'checkbox'; tcb.checked = XP_TREND.has(sec.dataset.xpChart);
+      tr.appendChild(tcb);
+      tr.appendChild(document.createTextNode('Trendline'));
+      tcb.addEventListener('change', () => {
+        if(tcb.checked) XP_TREND.add(sec.dataset.xpChart); else XP_TREND.delete(sec.dataset.xpChart);
+        xpRedraw(sec.dataset.xpChart);
+      });
+      row.appendChild(tr);
+    }
+    row.appendChild(inc);
+    tools.appendChild(row);
     if(!noNote){ tools.appendChild(note); tools.appendChild(printNote); }
     sec.appendChild(tools);
     if(sec.id === 'xpSecBench'){ cb.checked = false; sec.classList.add('xp-excluded'); }
@@ -3728,20 +3782,20 @@
       const withComp = (mainDs, fn) =>
         compRows ? [{ label:'Comparison', data: compRows.map(r => r ? fn(r) : 0), color: COMPARE_GREY }, mainDs] : [mainDs];
 
-      drawLineBar('chartXpBuyers', labels, [
+      xpBar('chartXpBuyers', labels, [
         { label:'New', data: rows.map(r=>Number(r.new_buyers)||0), color: getVar('--coral') },
         { label:'Returning', data: rows.map(r=>(Number(r.buyers)||0) - (Number(r.new_buyers)||0)), color: getVar('--kale') }
       ], { stacked:true, legend:true, yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
       const unitsOf = r => Number(r.units)||0;
-      drawLineBar('chartXpUnits', labels,
+      xpBar('chartXpUnits', labels,
         withComp({ label:'Items sold', data: rows.map(unitsOf), color: getVar('--coral') }, unitsOf),
         { yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
       const ord = r => Number(r.orders)||0;
-      drawLineBar('chartXpOrders', labels,
+      xpBar('chartXpOrders', labels,
         withComp({ label:'Purchases', data: rows.map(ord), color: getVar('--blueberry') }, ord),
         { yFormat: v=>fmtNum(v), tooltipFormat: v=>fmtNum(v) });
       const opb = r => r.buyers ? r.orders/r.buyers : 0;
-      drawLineBar('chartXpFreq', labels,
+      xpBar('chartXpFreq', labels,
         withComp({ label:'Visits per customer', data: rows.map(opb), color: getVar('--kale') }, opb),
         { yFormat: v=>v.toFixed(1), tooltipFormat: v=>v.toFixed(2) });
 
