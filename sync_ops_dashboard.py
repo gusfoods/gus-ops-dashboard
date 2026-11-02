@@ -230,12 +230,18 @@ def sync_warehouses(odoo, sb, now_iso):
     # Fridge -> B2B company: warehouse partner normalized to its commercial (company) partner.
     comm = commercial_partners(odoo, [w['partner_id'][0] for w in rows
                                       if isinstance(w.get('partner_id'), (list, tuple))])
+    # delivery address of the fridge itself (zip, city) for the regional school calendars
+    pids = sorted({w['partner_id'][0] for w in rows if isinstance(w.get('partner_id'), (list, tuple))})
+    addr = {r['id']: r for r in odoo.call('res.partner', 'read', [pids], fields=['zip', 'city'])} if pids else {}
     out, stock_loc_to_wh, companies = [], {}, {}
     for w in rows:
         loc_name = m2o_name(w.get('lot_stock_id'))
         pid = w['partner_id'][0] if isinstance(w.get('partner_id'), (list, tuple)) else None
         cpid, cname = comm.get(pid, (None, None))
+        a = addr.get(pid, {})
         out.append({
+            'partner_zip': clean(a.get('zip')) or None,
+            'partner_city': clean(a.get('city')) or None,
             'complete_name': w['name'],
             'warehouse_name': w['name'],
             'warehouse_code': clean(w.get('code')),
