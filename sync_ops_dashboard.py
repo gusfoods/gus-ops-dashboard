@@ -178,9 +178,15 @@ def sync_products(odoo, sb, now_iso):
     log('Syncing products...')
     # active_test False: include archived products so historical sale lines keep their
     # reference and category (otherwise ~5% of lines fall outside the catalog).
+    # "Expected Expiry Days": resolve the technical field name once by its label (custom field on product.template);
+    # fall back to Odoo's own expiration_time if no field carries that label.
+    fields = odoo.call('product.product', 'fields_get', [], attributes=['string', 'type'])
+    expiry_field = next((k for k, v in fields.items() if str(v.get('string', '')).strip().lower() == 'expected expiry days'
+                         and v.get('type') in ('integer', 'float')), 'expiration_time' if 'expiration_time' in fields else None)
+    log(f'  expiry field: {expiry_field}')
     rows = odoo.read_all('product.product', [],
                          ['default_code', 'name', 'barcode', 'standard_price', 'list_price',
-                          'categ_id', 'type', 'allergen_ids', 'may_contain_allergen_ids'],
+                          'categ_id', 'type', 'allergen_ids', 'may_contain_allergen_ids'] + ([expiry_field] if expiry_field else []),
                          context={'active_test': False})
     # allergen id -> English name (product.allergen, EU 1169/2011 list maintained in Odoo)
     allergen_names = {a['id']: clean(a['name']) for a in
@@ -190,7 +196,9 @@ def sync_products(odoo, sb, now_iso):
     for p in rows:
         if not p.get('default_code'):
             continue
+        exp = p.get(expiry_field) if expiry_field else None
         out.append({
+            'expected_expiry_days': int(exp) if isinstance(exp, (int, float)) and exp > 0 else None,
             'allergens': names_of(p.get('allergen_ids')),
             'may_contain_allergens': names_of(p.get('may_contain_allergen_ids')),
             'internal_reference': p['default_code'],
