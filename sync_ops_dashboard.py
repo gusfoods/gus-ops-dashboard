@@ -3,7 +3,7 @@
 Odoo -> Supabase sync for the Gus Foods Ops Dashboard (project evwfqounmubytvxmlinj).
 
 Fills the staging tables the ops_rollup materialized view reads from:
-  products, warehouses, sales_order_lines, stock_moves
+  products, warehouses, sales_order_lines, stock_moves, stock_requests, invoice_lines, attendances
 then calls refresh_ops_rollup().
 
 operation_type derivation (stock.move, state=done):
@@ -300,6 +300,47 @@ def sync_stock_requests(odoo, sb, since, now_iso, until=None):
     return sb.upsert('stock_requests', out, 'id')
 
 
+ATTENDANCE_FIELDS = ['employee_id', 'check_in', 'check_out', 'worked_hours', 'overtime_hours',
+                     'in_mode', 'out_mode', 'in_ip_address', 'in_browser', 'in_city', 'in_country_name',
+                     'in_latitude', 'in_longitude', 'out_ip_address', 'out_browser', 'out_city',
+                     'out_country_name', 'out_latitude', 'out_longitude', 'create_date', 'write_date']
+
+
+def sync_attendances(odoo, sb, since, now_iso, until=None):
+    """Odoo hr.attendance: driver check-in / check-out logs, full mirror incl. employee name.
+    Incremental on write_date so open shifts get their check_out on a later run."""
+    log(f'Syncing attendances since {since}...')
+    domain = [('write_date', '>=', since)]
+    if until:
+        domain.append(('write_date', '<', until))
+    try:
+        rows = odoo.read_all('hr.attendance', domain, ATTENDANCE_FIELDS, order='id')
+    except Exception as e:
+        log(f'  hr.attendance not available ({e.__class__.__name__}); skipping')
+        return 0
+    out = []
+    for r in rows:
+        emp = r.get('employee_id')
+        if not isinstance(emp, (list, tuple)):
+            continue
+        row = {
+            'id': r['id'],
+            'employee_id': emp[0],
+            'employee_name': emp[1],
+            'check_in': r.get('check_in'),
+            'check_out': clean(r.get('check_out')),
+            'worked_hours': r.get('worked_hours') or 0,
+            'overtime_hours': r.get('overtime_hours') or 0,
+            'created_at': r.get('create_date'),
+            'updated_at': r.get('write_date'),
+            'synced_at': now_iso,
+        }
+        for f in ATTENDANCE_FIELDS[5:19]:
+            row[f] = clean(r.get(f))
+        out.append(row)
+    return sb.upsert('attendances', out, 'id')
+
+
 INVOICE_JOURNALS = ['FEES', 'ROOM']
 
 
@@ -496,13 +537,14 @@ def main():
     log(f'Connected to Odoo (uid {odoo.uid}); syncing since {since}')
 
     if args.invoices_only:
-        n_products = n_sales = n_moves = n_sr = 0
+        n_products = n_sales = n_moves = n_sr = n_att = 0
     else:
         n_products = sync_products(odoo, sb, now_iso)
         stock_loc_to_wh = sync_warehouses(odoo, sb, now_iso)
         n_sales = sync_sales(odoo, sb, since, now_iso, args.until)
         n_moves = sync_stock_moves(odoo, sb, since, now_iso, stock_loc_to_wh, args.until)
         n_sr = sync_stock_requests(odoo, sb, since, now_iso, args.until)
+        n_att = sync_attendances(odoo, sb, since, now_iso, args.until)
     n_inv = sync_invoice_lines(odoo, sb, since, now_iso, args.until)
 
     if args.no_refresh:
@@ -519,7 +561,7 @@ def main():
                     raise
                 log(f'Refresh failed ({e}); retrying in 90s')
                 time.sleep(90)
-    log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} stock_requests={n_sr} invoice_lines={n_inv}')
+    log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} stock_requests={n_sr} attendances={n_att} invoice_lines={n_inv}')
 
 
 if __name__ == '__main__':
