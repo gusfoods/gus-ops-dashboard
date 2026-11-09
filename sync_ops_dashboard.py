@@ -104,7 +104,7 @@ class Supabase:
             log('WARNING: SUPABASE_SERVICE_KEY not set - writes will fail with the anon key')
         self.dry_run = dry_run
 
-    def _request(self, method, path, payload=None, headers=None):
+    def _request(self, method, path, payload=None, headers=None, timeout=120, retries=4):
         req = urllib.request.Request(self.base + path, method=method)
         req.add_header('apikey', self.key)
         req.add_header('Authorization', f'Bearer {self.key}')
@@ -112,15 +112,15 @@ class Supabase:
         for k, v in (headers or {}).items():
             req.add_header(k, v)
         body = json.dumps(payload).encode() if payload is not None else None
-        for attempt in range(4):
+        for attempt in range(retries):
             try:
-                with urllib.request.urlopen(req, body, timeout=120) as res:
+                with urllib.request.urlopen(req, body, timeout=timeout) as res:
                     return res.read().decode()
             except urllib.error.HTTPError as e:
                 detail = e.read().decode()[:300]
                 raise RuntimeError(f'{method} {path} -> HTTP {e.code}: {detail}') from None
             except Exception:
-                if attempt == 3:
+                if attempt == retries - 1:
                     raise
                 time.sleep(5 * (attempt + 1))
 
@@ -155,11 +155,11 @@ class Supabase:
         log(f'  {table}: insert-ignored {len(rows)} rows')
         return len(rows)
 
-    def rpc(self, fn):
+    def rpc(self, fn, timeout=120, retries=4):
         if self.dry_run:
             log(f'  [dry-run] would call rpc/{fn}')
-            return
-        self._request('POST', f'/rest/v1/rpc/{fn}', {})
+            return 'null'
+        return self._request('POST', f'/rest/v1/rpc/{fn}', {}, timeout=timeout, retries=retries)
 
 
 def log(msg):
@@ -550,18 +550,39 @@ def main():
     if args.no_refresh:
         log('Skipping rollup refresh (--no-refresh)')
     else:
-        # The refresh can lose a lock race (e.g. autovacuum) - retry before failing the run.
-        for attempt in range(3):
-            try:
-                log('Refreshing materialized views' + (f' (retry {attempt})' if attempt else '') + '...')
-                sb.rpc('refresh_ops_rollup')
-                break
-            except Exception as e:
-                if attempt == 2:
-                    raise
-                log(f'Refresh failed ({e}); retrying in 90s')
-                time.sleep(90)
+        refresh_matviews(sb)
     log(f'Done. products={n_products} sales_lines={n_sales} stock_moves={n_moves} stock_requests={n_sr} attendances={n_att} invoice_lines={n_inv}')
+
+
+def refresh_matviews(sb):
+    """Refresh the rollup matviews without holding an HTTP connection open.
+
+    Preferred path: request_ops_refresh() schedules a one-shot pg_cron job and returns a
+    log id; we poll ops_refresh_log until it finishes. The refresh takes several minutes on
+    this instance, so a synchronous RPC blew the 120s read timeout and every retry queued
+    another refresh behind the lock (Fri/Sun 2026-11 failures).
+    Fallback (until migrations/20261109_async_ops_refresh.sql is applied): one synchronous
+    call with a long timeout and no re-sends.
+    """
+    log('Requesting materialized view refresh...')
+    try:
+        log_id = json.loads(sb.rpc('request_ops_refresh'))
+    except RuntimeError as e:
+        if 'HTTP 404' not in str(e):
+            raise
+        log('request_ops_refresh not deployed yet - falling back to synchronous refresh')
+        sb.rpc('refresh_ops_rollup', timeout=1500, retries=1)
+        return
+    deadline = time.time() + 45 * 60
+    while time.time() < deadline:
+        time.sleep(30)
+        row = json.loads(sb._request('GET', f'/rest/v1/ops_refresh_log?id=eq.{log_id}&select=status,error,detail'))[0]
+        if row['status'] == 'done':
+            log(f'Refresh done ({row["detail"]})')
+            return
+        if row['status'] in ('failed', 'skipped'):
+            raise RuntimeError(f'Refresh {row["status"]}: {row["error"]}')
+    raise RuntimeError(f'Refresh {log_id} still {row["status"]} after 45 min')
 
 
 if __name__ == '__main__':
