@@ -32,24 +32,24 @@ declare t0 timestamptz; r text := '';
 begin
   if not pg_try_advisory_xact_lock(hashtext('refresh_ops_rollup')) then
     if p_log_id is not null then
-      update public.ops_refresh_log set status='skipped', finished_at=now(), error='another refresh is running' where id=p_log_id;
+      update public.ops_refresh_log set status='skipped', finished_at=clock_timestamp(), error='another refresh is running' where id=p_log_id;
     end if;
     return 'skipped: another refresh is running';
   end if;
   if p_log_id is not null then
-    update public.ops_refresh_log set status='running', started_at=now() where id=p_log_id;
+    update public.ops_refresh_log set status='running', started_at=clock_timestamp() where id=p_log_id;
   end if;
   t0 := clock_timestamp(); refresh materialized view concurrently public.ops_rollup;  r := r || 'ops='  || round(extract(epoch from clock_timestamp()-t0)) || 's ';
   t0 := clock_timestamp(); refresh materialized view concurrently public.cust_rollup; r := r || 'cust=' || round(extract(epoch from clock_timestamp()-t0)) || 's ';
   t0 := clock_timestamp(); refresh materialized view concurrently public.prod_rollup; r := r || 'prod=' || round(extract(epoch from clock_timestamp()-t0)) || 's ';
   t0 := clock_timestamp(); refresh materialized view concurrently public.b2b_rollup;  r := r || 'b2b='  || round(extract(epoch from clock_timestamp()-t0)) || 's';
   if p_log_id is not null then
-    update public.ops_refresh_log set status='done', finished_at=now(), detail=r where id=p_log_id;
+    update public.ops_refresh_log set status='done', finished_at=clock_timestamp(), detail=r where id=p_log_id;
   end if;
   return r;
 exception when others then
   if p_log_id is not null then
-    update public.ops_refresh_log set status='failed', finished_at=now(), error=sqlerrm where id=p_log_id;
+    update public.ops_refresh_log set status='failed', finished_at=clock_timestamp(), error=sqlerrm where id=p_log_id;
   end if;
   raise;
 end;
@@ -68,7 +68,7 @@ begin
   perform cron.unschedule('ops-refresh-' || p_log_id);
   perform public.refresh_ops_rollup(p_log_id);
 exception when others then
-  update public.ops_refresh_log set status='failed', finished_at=now(), error=coalesce(error, sqlerrm) where id=p_log_id;
+  update public.ops_refresh_log set status='failed', finished_at=clock_timestamp(), error=coalesce(error, sqlerrm) where id=p_log_id;
 end;
 $$;
 revoke all on function public.run_ops_refresh(bigint) from public, anon, authenticated;
